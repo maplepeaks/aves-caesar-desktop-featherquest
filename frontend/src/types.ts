@@ -22,6 +22,11 @@ export type Classification = {
 	name_language?: string;
 	name_lat?: string;
 	manual?: boolean;
+	taxonomy_refinement?: {
+		status: "suggested" | "unresolved";
+		requires_confirmation: boolean;
+		suggestions: { common_name: string; scientific_name: string; preferred: boolean; confidence: null }[];
+	};
 };
 
 

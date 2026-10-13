@@ -160,6 +160,10 @@ class ManualCorrectionStore:
             return None
 
         replacement = dict(source)
+        if species_id != source.get("species_id"):
+            # Split hints describe the model class, not the user's correction.
+            # The complete model result remains in originalClassification.
+            replacement.pop("taxonomy_refinement", None)
         replacement["species_id"] = species_id
         return replacement
 

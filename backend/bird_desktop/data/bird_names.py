@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..runtime.config import RuntimeConfig
+from .taxonomy_splits import splits_for_labels
 
 
 DEFAULT_LANGUAGE = "en"
@@ -76,6 +77,13 @@ class BirdNamesLoader:
             reader = csv.DictReader(handle)
             for class_index, record in enumerate(reader):
                 self._add_csv_species_record(names, record, class_index, localized_key, language)
+
+        for species_id, split in splits_for_labels(path).items():
+            # Do not present an absent daughter class as a confident prediction.
+            names[species_id] = BirdNames(name_lat=" / ".join(t.scientific_name for t in split.taxa),
+                                          name=split.display_name, language="en")
+            for taxon in split.taxa:
+                names[taxon.species_id] = BirdNames(taxon.scientific_name, taxon.common_name, "en")
 
         return names
 

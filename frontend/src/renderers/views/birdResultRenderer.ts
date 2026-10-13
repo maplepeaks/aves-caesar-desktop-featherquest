@@ -66,9 +66,18 @@ export class BirdResultRenderer {
 					${this.renderPrimaryMatchBadge(bird, bestConfidence)}
 					</div>
 					${this.renderAlternates(bird.classification.slice(1))}
+					${this.renderTaxonomyRefinement(best)}
 				</div>
 			</details>
 		`;
+	}
+
+
+	private renderTaxonomyRefinement(item: Classification | undefined): string {
+		if (!item?.taxonomy_refinement) return "";
+		const rows = item.taxonomy_refinement.suggestions.map(suggestion =>
+			`<div class="alternate-row"><strong>${escapeHtml(suggestion.common_name)}</strong><span>${suggestion.preferred ? "Geographic suggestion" : "Possible species"}</span></div>`);
+		return `<p>Taxonomy split: the model score applies to its original class, not either species. Confirm manually.</p>${rows.join("")}`;
 	}
 
 

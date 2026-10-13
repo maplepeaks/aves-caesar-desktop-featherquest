@@ -166,12 +166,14 @@ class PredictionCache:
 
     @staticmethod
     def model_fingerprint(config: RuntimeConfig) -> str:
+        from ..data.taxonomy_splits import TAXONOMY_REVISION
         files = {
             "detector": FileContentFingerprint.onnx_model(config.detector_model),
             "classifier": FileContentFingerprint.onnx_model(config.classifier_model),
             "labels": FileContentFingerprint.file(config.labels_path),
         }
         payload = {
+            "taxonomyRevision": TAXONOMY_REVISION,
             "files": files,
             "detectionThreshold": config.detection_threshold,
             "classificationTopK": config.classification_top_k,

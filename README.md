@@ -34,6 +34,11 @@ The app runs bird detection and classification locally on your computer with its
 
 ## Reliability
 
+Some exported model labels do not cover recent taxonomy splits. Yellow Warbler
+results preserve the original model score and offer separate Northern/Mangrove
+review suggestions, with conservative geographic hints when available. These
+hints are not species probabilities. See [TAXONOMY.md](TAXONOMY.md).
+
 GPS coordinates help the app choose between visually similar species. Without GPS, Aves Caesar relies on the image alone and still performs well.
 
 | Context | Species top-1 | Species top-5 | Species F1 | Family |

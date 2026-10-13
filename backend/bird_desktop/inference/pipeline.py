@@ -13,6 +13,7 @@ import numpy as np
 from PIL import Image
 
 from ..data.gpx import GpxService
+from ..data.taxonomy_splits import refine, splits_for_labels
 from ..runtime.config import RuntimeConfig
 from .onnxruntime_loader import OnnxRuntimeLoader
 from .preprocess import BirdBox, BirdImagePreprocessor, ClassifierCropJob
@@ -49,6 +50,7 @@ class BirdOnnxPipeline:
         config.validate()
         self.config = config
         self.class_ids = self._load_class_ids(config.labels_path)
+        self.taxonomy_splits = splits_for_labels(config.labels_path)
         self.detector_labels = dict(DEFAULT_DETECTOR_LABELS)
         self.runtime = runtime or RuntimeResolver.resolve(config)
         self.provider_selection = self.runtime.selection
@@ -285,12 +287,17 @@ class BirdOnnxPipeline:
     def _classifier_results_from_feeds(self, feeds: dict[str, np.ndarray]) -> list[list[dict[str, Any]]]:
         results: list[list[dict[str, Any]]] = []
         scores, indices = self._run_classifier(feeds)
-        for row_scores, row_indices in zip(scores, indices):
+        for row_index, (row_scores, row_indices) in enumerate(zip(scores, indices)):
             topk = []
             for score, idx in zip(row_scores, row_indices):
                 confidence = float(score)
                 class_index = int(idx)
-                topk.append(self._classification_for_index(class_index, confidence))
+                classification = self._classification_for_index(class_index, confidence)
+                split = getattr(self, "taxonomy_splits", {}).get(classification["species_id"])
+                if split:
+                    classification = refine(classification, split, feeds["lat"][row_index],
+                                            feeds["lon"][row_index], feeds["day"][row_index])
+                topk.append(classification)
             results.append(topk)
 
         return results
