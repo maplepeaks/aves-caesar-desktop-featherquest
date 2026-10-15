@@ -61,3 +61,65 @@ Run `PYTHONPATH=backend python -m pytest tests/test_taxonomy_splits.py`.
 Tests cover Havasupai, Galapagos, Caribbean summer/winter, missing dates/GPS,
 invalid coordinates, future split-aware labels, per-image batch context,
 unchanged raw scores and indices, integration output, and cache invalidation.
+
+## Warbling Vireo (2025 split)
+
+The same pinned labels export class `10573`, *Vireo gilvus*, named Eastern
+Warbling Vireo, with no *Vireo swainsoni* class. Training on the former combined
+Warbling Vireo concept is plausible but undocumented. Treat this as a coverage
+limitation, rather than evidence that the classifier distinguishes Eastern from
+Western. The affected display is **Warbling Vireo (Eastern / Western)**, with
+both daughter species offered for confirmation and no daughter probabilities.
+The raw class ID and score stay unchanged. Confirmed manual selections remain
+separate from model evidence.
+
+### Geographic data choice
+
+Cornell's [Status and Trends FAQ](https://science.ebird.org/en/status-and-trends/faq)
+explicitly says its Eastern/Western Warbling Vireo product was modeled using
+both species. That combined layer cannot distinguish the daughters. Access to
+Status products also requires agreeing to the data terms and an access key;
+see [downloads](https://science.ebird.org/en/status-and-trends/download-data).
+Do not treat a renamed combined product as a split-aware range dataset. Revisit
+this choice when separately modeled daughter products become available with
+appropriate coverage and redistribution terms. No raster/GIS dependency,
+network request, or downloaded biological range dataset is added here.
+
+### Conservative regional implementation
+
+`geographic_refinement.py` supplies reusable declarative regional boxes,
+seasonal windows, explicit exclusions, input validation, and conflict handling.
+These are hand-authored regional CORE hints, not digitized Cornell range maps,
+county boundaries, habitat suitability, or complete biological ranges. Exact
+box edges deliberately remain unresolved. Unsupported gaps are intentional.
+The rules conditionally suggest a daughter of an existing Warbling Vireo
+prediction; they cannot establish that a bird occurs at a coordinate.
+
+Cornell's [2025 regional guidance](https://science.ebird.org/en/use-ebird-data/the-ebird-taxonomy/2025-ebird-taxonomy-update)
+provides the basis for the taxon choices. Western cores cover the Pacific coast,
+Great Basin/interior Southwest, British Columbia and parts of Alaska/Yukon.
+Eastern cores cover central/eastern US, southern eastern Canada, and a
+Saskatchewan interior core. Contact-region masks leave Alberta, Cypress Hills,
+western Plains/Black Hills, Wyoming and Colorado cores unresolved; Montana is
+also deferred. No county-level or habitat-specific assignments are approximated
+within these masks, even where some locations could be assigned with finer data.
+No continent-wide longitude dividing line is used.
+
+Season windows are deliberately conservative IMPLEMENTATION choices, not
+Cornell-published arrival/departure dates: day 135–212 for Pacific/intermountain
+cores (approximately mid-May–July); day 157–212 for eastern/northern cores
+(approximately June 5/6–July). The classifier supplies day-of-year without year,
+so endpoints shift a day in leap years. Spring/fall North American migration
+outside those windows and winter remain unresolved. Small interior cores of
+Sonora, Sinaloa and Nayarit support Western during days 1–120 and 244–366,
+following Cornell's explicit western-Mexico migration/winter guidance; other
+Mexican regions remain unresolved. This does not implement the full Mexican
+resident/breeding range. Missing/invalid GPS or date always stays unresolved.
+
+Vagrants remain possible in every supported region. All hints require human
+confirmation and never acquire a numeric daughter-species confidence.
+
+Refinement alternatives belong to the same detected bird. PhotoCatalog keeps
+one detection and excludes taxonomy alternatives from independent species
+discovery. A future labels file containing both daughter species bypasses the
+legacy rule. Changing the taxonomy revision invalidates cached predictions.

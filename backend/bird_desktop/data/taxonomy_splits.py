@@ -11,8 +11,10 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+from .geographic_refinement import RegionalRule, regional_preference
 
-TAXONOMY_REVISION = "2025-yellow-warbler-v1"
+
+TAXONOMY_REVISION = "2025-splits-v3"
 
 
 @dataclass(frozen=True)
@@ -40,7 +42,11 @@ YELLOW_WARBLER = Split("Setophaga petechia", "Yellow Warbler (Northern / Mangrov
     Taxon("Setophaga aestiva", "Northern Yellow Warbler"),
     Taxon("Setophaga petechia", "Mangrove Yellow Warbler"),
 ))
-SPLITS = (YELLOW_WARBLER,)
+WARBLING_VIREO = Split("Vireo gilvus", "Warbling Vireo (Eastern / Western)", (
+    Taxon("Vireo gilvus", "Eastern Warbling Vireo"),
+    Taxon("Vireo swainsoni", "Western Warbling Vireo"),
+))
+SPLITS = (YELLOW_WARBLER, WARBLING_VIREO)
 
 
 @lru_cache(maxsize=8)
@@ -90,9 +96,63 @@ def _yellow_warbler_preference(latitude, longitude, day):
     return None, "overlapping_or_unsupported_range_or_season"
 
 
+# Regional cores derived conservatively from Cornell's 2025 taxonomy guidance.
+# These are NOT digitized ranges or county boundaries. Leave boundary areas out.
+# Pacific/Intermountain cores can support late-May hints; near the Plains use
+# only the narrower June/July breeding window (day 157 starts June 5/6).
+WARBLING_REGIONS = (
+    RegionalRule("western_pacific_intermountain_breeding", "Vireo swainsoni", (
+        (33, 42, -123, -114),       # California/interior Southwest
+        (42, 49, -124, -117),       # Pacific Northwest
+        (36, 45, -117, -109.1),     # Great Basin/Utah/Idaho, away from contact
+        (49, 59, -130, -120.1),     # British Columbia core, excluding Alberta
+    ), (135, 212)),
+    RegionalRule("western_northern_breeding", "Vireo swainsoni", (
+        (59, 64, -150, -125),       # Southwestern Alaska/southern Yukon cores
+    ), (157, 212)),
+    RegionalRule("eastern_breeding_core", "Vireo gilvus", (
+        (36, 49, -96, -76),         # Central/eastern US, away from Plains contact
+        (40, 47, -76, -69),         # Northeast
+        (45, 50, -79, -64),         # Southern Ontario/Quebec/Maritimes cores
+        (49, 53, -105, -98),        # Saskatchewan core, north/east of Cypress Hills
+    ), (157, 212)),
+    # Cornell explicitly supports Western in these western Mexican regions in
+    # migration/winter. Restrict to interior cores of Sonora/Sinaloa/Nayarit;
+    # no inference for southern/eastern Mexico or central-American overlap.
+    RegionalRule("western_mexico_nonbreeding_core", "Vireo swainsoni", (
+        (28, 30, -111.5, -110),     # Sonora
+        (24, 26, -107.5, -106.5),   # Sinaloa
+        (21.5, 22, -105.1, -104.8), # Nayarit
+    ), (1, 120)),
+    RegionalRule("western_mexico_autumn_core", "Vireo swainsoni", (
+        (28, 30, -111.5, -110), (24, 26, -107.5, -106.5),
+        (21.5, 22, -105.1, -104.8),
+    ), (244, 366)),
+)
+# Deliberately exclude entire contact-region cores instead of pretending GPS
+# alone resolves county/habitat-specific differences described by Cornell.
+WARBLING_CONTACT = (
+    (37, 41, -109.1, -102),  # Colorado
+    (41, 45, -111.1, -104),  # Wyoming
+    (40, 43, -104.1, -98),   # western Nebraska/Plains
+    (43, 46, -104.1, -100),  # Black Hills/western South Dakota
+    (49, 60, -120, -110),    # Alberta
+    (49, 50.5, -110, -108),  # Cypress Hills/Maple Creek
+    (45, 49, -117, -104),    # Montana: Cornell conversion still in progress
+)
+
+
+def _warbling_vireo_preference(latitude, longitude, day):
+    return regional_preference(WARBLING_REGIONS, latitude, longitude, day,
+                               WARBLING_CONTACT)
+
+
 def refine(classification: dict, split: Split, latitude=None, longitude=None, day=None) -> dict:
-    preferred, reason = (_yellow_warbler_preference(latitude, longitude, day)
-                         if split == YELLOW_WARBLER else (None, "no_geographic_rule"))
+    rules = {YELLOW_WARBLER: _yellow_warbler_preference,
+             WARBLING_VIREO: _warbling_vireo_preference}
+    rule = rules.get(split)
+    preferred, reason = (rule(latitude, longitude, day) if rule
+                         else (None, "no_geographic_rule"))
     suggestions = [taxon.suggestion(taxon.scientific_name == preferred) for taxon in split.taxa]
     suggestions.sort(key=lambda item: not item["preferred"])
     return dict(classification, taxonomy_refinement=dict(
