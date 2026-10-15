@@ -75,6 +75,26 @@ class BirdOnnxPipeline:
         return self.predict_many([PipelineInput(image, latitude, longitude, datetime_text)])[0]
 
 
+    def classify_boxes(self, image: Image.Image, boxes: list[BirdBox], latitude=None, longitude=None, datetime_text=None, crop_padding: float = 5) -> PipelineResult:
+        """Classify explicit boxes from the supplied image's full-resolution pixels.
+
+        Callers own coordinate mapping. Detection and default predict() behavior
+        are unchanged; taxonomy refinement uses the normal classifier path.
+        """
+        if not np.isfinite(crop_padding) or crop_padding < 0:raise ValueError("Invalid crop padding")
+        for box in boxes:
+            if len(box.box) != 4 or not all(np.isfinite(value) for value in box.box):
+                raise ValueError("Invalid classifier box")
+            x0,y0,x1,y1=box.box
+            if not (0 <= x0 < x1 <= image.width and 0 <= y0 < y1 <= image.height):
+                raise ValueError("Classifier box outside source image")
+        jobs=[ClassifierCropJob(image,box,crop_padding) for box in boxes]
+        classifications=self._classify_many(jobs,[(latitude,longitude,datetime_text)]*len(jobs))
+        return PipelineResult(provider=self._active_providers(),birds=[
+            {"box":box.box,"box_confidence":box.score,"classification":classification}
+            for box,classification in zip(boxes,classifications) if classification])
+
+
     def predict_many(self, inputs: list[PipelineInput]) -> list[PipelineResult]:
         if not inputs:
             return []

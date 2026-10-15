@@ -25,6 +25,7 @@ class BirdBox:
 class ClassifierCropJob:
     image: Image.Image
     box: BirdBox
+    padding: float = EXPAND_PIXELS
 
 
 class BirdImagePreprocessor:
@@ -119,7 +120,7 @@ class BirdImagePreprocessor:
 
     @staticmethod
     def _classifier_tensor_from_box(job: ClassifierCropJob, crop_size: int) -> np.ndarray:
-        crop = BirdImagePreprocessor._square_crop(job.image, job.box, job.image.width, job.image.height)
+        crop = BirdImagePreprocessor._square_crop(job.image, job.box, job.image.width, job.image.height, job.padding)
         try:
             return BirdImagePreprocessor._classifier_tensor(crop, crop_size)
         finally:
@@ -133,12 +134,12 @@ class BirdImagePreprocessor:
 
 
     @staticmethod
-    def _square_crop(image: Image.Image, item: BirdBox, width: int, height: int) -> Image.Image:
+    def _square_crop(image: Image.Image, item: BirdBox, width: int, height: int, expand_pixels: float = EXPAND_PIXELS) -> Image.Image:
         x0, y0, x1, y1 = item.box
-        x0 -= EXPAND_PIXELS
-        y0 -= EXPAND_PIXELS
-        x1 += EXPAND_PIXELS
-        y1 += EXPAND_PIXELS
+        x0 -= expand_pixels
+        y0 -= expand_pixels
+        x1 += expand_pixels
+        y1 += expand_pixels
         x0, x1 = sorted((x0, x1))
         y0, y1 = sorted((y0, y1))
         side = int(math.ceil(max(x1 - x0, y1 - y0, 1)))
