@@ -123,3 +123,31 @@ Refinement alternatives belong to the same detected bird. PhotoCatalog keeps
 one detection and excludes taxonomy alternatives from independent species
 discovery. A future labels file containing both daughter species bypasses the
 legacy rule. Changing the taxonomy revision invalidates cached predictions.
+
+## Family model evidence
+
+The upstream README reports internal `family_top1_percent` of 99.33 with GPS
+and 99.04 without GPS. The shipped `model_performance.json` contains those
+constants; runtime model metadata and release-manifest code load/display them.
+The public desktop source does not include the evaluation implementation,
+held-out labels, confusion matrix or family aggregation procedure, so these
+numbers cannot be independently reproduced here. In particular we cannot say
+whether family top-1 means mapping the top species to its family or selecting
+an aggregated family score. They are population evaluation metrics, not the
+confidence of a particular photograph or our new suggestions.
+
+Inspection of the pinned classifier with ONNX Runtime shows exactly two
+outputs: `species_top5_scores` and `species_top5_indices`, each batch × 5.
+Inspection of the ONNX graph shows Softmax followed by TopK. The full species
+vector exists internally (`/Softmax_output_0`) but is not an exported output;
+using it would require a modified ONNX export/output graph. We have not changed
+weights, exported outputs, detector/classifier inference or dependencies.
+
+`data/family_suggestions.py` groups original returned classes through a supplied
+canonical taxonomy mapping. Its sum is **partial top-five score mass**, without
+renormalization, calibration or an invented family confidence. Family ranking
+can differ from a ranking based on the full vector. Unknown taxonomy mappings
+are omitted. Split alternatives are never summed: the original class is counted
+once before expansion. Duplicate class IDs are ignored. Every suggestion
+requires explicit human confirmation. The helper is reusable by integrations;
+the PhotoCatalog adapter supplies authoritative eBird family relationships.
