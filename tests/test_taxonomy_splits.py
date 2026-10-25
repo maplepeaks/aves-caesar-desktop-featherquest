@@ -231,3 +231,101 @@ def test_reusable_regional_rules_leave_conflicts_and_boundaries_unresolved():
     assert regional_preference((a,), 5, 5, 99)[0] is None
     assert regional_preference((a,), 5, 5, 150, ((4, 6, 4, 6),))[0] is None
     assert regional_preference((a,), 5, 5, 150)[0] == 'A'
+
+
+@pytest.mark.parametrize('lat,lon,expected', [
+    (49.2, -123.1, 'Numenius hudsonicus'),  # British Columbia
+    (61.2, -149.9, 'Numenius hudsonicus'),  # Anchorage, outside western Alaska
+    (37.8, -122.4, 'Numenius hudsonicus'),  # California
+    (42.4, -71.1, 'Numenius hudsonicus'),   # Massachusetts
+    (9.9, -84.1, 'Numenius hudsonicus'),    # Costa Rica
+    (-33.0, -71.6, 'Numenius hudsonicus'),  # Chile
+    (-23.0, -43.2, 'Numenius hudsonicus'),  # Brazil
+    (52, 1, 'Numenius phaeopus'),          # Britain
+    (13.7, 100.5, 'Numenius phaeopus'),     # Thailand
+    (19, 72.8, 'Numenius phaeopus'),       # India
+    (-33.9, 18.4, 'Numenius phaeopus'),    # South Africa
+    (-12.5, 130.8, 'Numenius phaeopus'),   # Australia
+    (64.5, -165.4, None),                 # western Alaska
+    (52, -174, None),                     # Aleutians
+    (21.3, -157.8, None),                 # Hawaii
+    (28.2, -177.4, None),                 # Midway
+    (-15.9, -5.7, None),                  # St Helena
+    (-7.9, -14.4, None),                  # Ascension
+    (64.1, -21.9, None),                  # Iceland: outside supported cores
+    (0, 0, None), (35, -30, None),
+    (70, -100, None), (40, -160, None),    # exact outer boundaries
+    (None, None, None), (40, None, None), (None, -100, None),
+    (float('nan'), -100, None), (40, float('inf'), None),
+    (91, -100, None), (40, -181, None),
+])
+def test_whimbrel_geographic_hints_preserve_evidence(lat, lon, expected):
+    from bird_desktop.data.taxonomy_splits import WHIMBREL
+    original = dict(species_id='6584', confidence=.937)
+    result = refine(original, WHIMBREL, lat, lon)  # date intentionally absent
+    refinement = result['taxonomy_refinement']
+    assert original == dict(species_id='6584', confidence=.937)
+    assert result['species_id'] == refinement['original_species_id'] == '6584'
+    assert result['confidence'] == refinement['model_confidence'] == .937
+    assert refinement['original_scientific_name'] == 'Numenius phaeopus'
+    assert refinement['requires_confirmation'] is True
+    assert refinement['status'] == ('suggested' if expected else 'unresolved')
+    assert refinement['method'] == ('geographic_hint' if expected else 'taxonomy_split')
+    assert {t['scientific_name'] for t in refinement['suggestions']} == {'Numenius hudsonicus', 'Numenius phaeopus'}
+    assert all(t['confidence'] is None for t in refinement['suggestions'])
+    rows = review_candidates(result, 'ignored', 'ignored')
+    assert all(t['score'] == .937 and t['species_confidence'] is None for t in rows)
+    assert [t['scientific_name'] for t in rows if t['auto_select']] == ([expected] if expected else [])
+    assert json.loads(json.dumps(result, allow_nan=False)) == result
+
+
+def test_shipped_whimbrel_labels_and_pipeline_alignment():
+    import csv
+    from pathlib import Path
+    from bird_desktop.data.taxonomy_splits import WHIMBREL, WARBLING_VIREO
+    path = Path(__file__).resolve().parents[1] / 'models/species_mapping_v2.csv'
+    with path.open(newline='', encoding='utf-8') as handle:
+        records = list(csv.DictReader(handle))
+    assert len(records) == 10859
+    assert [(i, r['species_id']) for i, r in enumerate(records)
+            if r['scientific_name'] == 'Numenius phaeopus'] == [(6584, '6584')]
+    assert not any(r['scientific_name'] == 'Numenius hudsonicus' for r in records)
+    splits = splits_for_labels(path)
+    assert splits == {'9152': YELLOW_WARBLER, '10573': WARBLING_VIREO, '6584': WHIMBREL}
+    names = BirdNamesLoader(path)
+    assert names.get('6584').name == 'Whimbrel (Hudsonian / Eurasian)'
+    assert names.get('taxonomy:Numenius hudsonicus').name == 'Hudsonian Whimbrel'
+    assert names.get('taxonomy:Numenius phaeopus').name == 'Eurasian Whimbrel'
+    pipeline = BirdOnnxPipeline.__new__(BirdOnnxPipeline)
+    pipeline.class_ids = pipeline._load_class_ids(path)
+    original_ids = pipeline.class_ids.copy()
+    pipeline.taxonomy_splits = splits
+    indices = np.array([[6584, 6583, 6585]] * 3)
+    scores = np.array([[.937, .03, .01]] * 3, dtype=np.float32)
+    pipeline._run_classifier = lambda feeds: (scores, indices)
+    results = pipeline._classifier_results_from_feeds({
+        'lat': np.array([49.2, 13.7, np.nan]),
+        'lon': np.array([-123.1, 100.5, np.nan]), 'day': np.full(3, np.nan),
+    })
+    for row, expected in zip(results, ['Numenius hudsonicus', 'Numenius phaeopus', None]):
+        assert [t['species_id'] for t in row] == ['6584', '6583', '6585']
+        assert [t['confidence'] for t in row] == [float(s) for s in scores[0]]
+        assert all('taxonomy_refinement' not in t for t in row[1:])
+        suggestions = row[0]['taxonomy_refinement']['suggestions']
+        assert [t['scientific_name'] for t in suggestions if t['preferred']] == ([expected] if expected else [])
+    assert pipeline.class_ids == original_ids == [r['species_id'] for r in records]
+    # Every unaffected shipped label retains its original English/scientific mapping.
+    for r in records:
+        if r['species_id'] not in splits:
+            assert names.get(r['species_id']).name == r['name_en']
+            assert names.get(r['species_id']).name_lat == r['scientific_name']
+
+
+def test_future_whimbrel_classifier_bypasses_refinement(tmp_path):
+    path = tmp_path / 'future-whimbrel.csv'
+    path.write_text('species_id,scientific_name,name_en\n6584,Numenius phaeopus,Eurasian Whimbrel\n20000,Numenius hudsonicus,Hudsonian Whimbrel\n')
+    assert splits_for_labels(path) == {}
+    names = BirdNamesLoader(path)
+    assert names.get('6584').name == 'Eurasian Whimbrel'
+    assert names.get('20000').name == 'Hudsonian Whimbrel'
+    assert list(names.all()) == ['6584', '20000']

@@ -151,3 +151,43 @@ are omitted. Split alternatives are never summed: the original class is counted
 once before expansion. Duplicate class IDs are ignored. Every suggestion
 requires explicit human confirmation. The helper is reusable by integrations;
 the PhotoCatalog adapter supplies authoritative eBird family relationships.
+
+
+## Whimbrel (2025 split)
+
+The pinned 10,859-class label table has exactly one Whimbrel output:
+zero-based index / species ID `6584`, *Numenius phaeopus*, already named
+Eurasian Whimbrel. There is no *Numenius hudsonicus* output. As with the previous
+splits, the artifacts do not establish whether training used the old combined
+species concept; a modern display label alone cannot demonstrate visual
+separation of the daughters.
+
+The existing split declaration, name loader, per-image pipeline refinement and
+review-candidate helper now expose **Whimbrel (Hudsonian / Eurasian)** with
+Hudsonian Whimbrel (*N. hudsonicus*) and Eurasian Whimbrel (*N. phaeopus*)
+suggestions. The original classifier ID, score and ordering remain intact.
+Suggestions have null species confidence and require confirmation. Revision
+`2025-splits-v4` invalidates cached results. A future label table containing
+both daughter species bypasses refinement and keeps both native mappings.
+No label rows, output indices, model files or weights are changed.
+
+The [eBird 2025 guidance](https://science.ebird.org/en/use-ebird-data/the-ebird-taxonomy/2025-ebird-taxonomy-update)
+supports continental geographic inference, with explicit cautions for western
+Alaska, mid-ocean islands, Hawaii and Midway. Our hand-authored boxes are a
+conservative subset of that guidance, not range polygons or visual evidence.
+Americas cores prefer Hudsonian; Europe, Africa, Asia and Australia cores prefer
+Eurasian. Western Alaska/Aleutians, Hawaii/Midway, mid-Atlantic islands,
+Greenland, Iceland, unsupported gaps and exact outer edges remain unresolved.
+These rules deliberately omit some assignable regions rather than implement a
+complete global distribution. No date is required: the hint is conditional on
+an existing Whimbrel prediction and describes continental affinity, not seasonal
+presence. Missing, partial, nonfinite or out-of-bounds GPS yields both alternatives
+without a preference. Vagrants remain possible even in supported cores.
+
+Validation in `tests/test_taxonomy_splits.py` covers representative Americas and
+Old World locations, ambiguous islands/Beringia, invalid/missing GPS, absent
+dates, preserved raw scores, per-image batch context, future split-aware labels,
+and all unaffected shipped species names. The shipped CSV is checked for 10,859
+rows and Whimbrel at index 6584; pipeline tests preserve the full class-ID order
+and verify neighboring class outputs. Existing cache-revision and previous split
+tests also remain applicable.

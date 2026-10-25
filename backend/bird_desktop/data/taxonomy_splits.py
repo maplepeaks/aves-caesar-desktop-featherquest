@@ -14,7 +14,7 @@ from pathlib import Path
 from .geographic_refinement import RegionalRule, regional_preference
 
 
-TAXONOMY_REVISION = "2025-splits-v3"
+TAXONOMY_REVISION = "2025-splits-v4"
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,11 @@ WARBLING_VIREO = Split("Vireo gilvus", "Warbling Vireo (Eastern / Western)", (
     Taxon("Vireo gilvus", "Eastern Warbling Vireo"),
     Taxon("Vireo swainsoni", "Western Warbling Vireo"),
 ))
-SPLITS = (YELLOW_WARBLER, WARBLING_VIREO)
+WHIMBREL = Split("Numenius phaeopus", "Whimbrel (Hudsonian / Eurasian)", (
+    Taxon("Numenius hudsonicus", "Hudsonian Whimbrel"),
+    Taxon("Numenius phaeopus", "Eurasian Whimbrel"),
+))
+SPLITS = (YELLOW_WARBLER, WARBLING_VIREO, WHIMBREL)
 
 
 @lru_cache(maxsize=8)
@@ -147,9 +151,35 @@ def _warbling_vireo_preference(latitude, longitude, day):
                                WARBLING_CONTACT)
 
 
+# Continental review cores, not occurrence maps. Exclude Beringia, Greenland,
+# Iceland and remote oceanic islands rather than infer across overlap/vagrancy.
+# No seasonal distinction is needed for these conditional continental hints.
+WHIMBREL_REGIONS = (
+    RegionalRule("americas_core", "Numenius hudsonicus", (
+        (7, 50, -130, -50),
+        (50, 70, -160, -50),
+        (-56, 13, -82, -35),
+    ), (1, 366)),
+    RegionalRule("old_world_core", "Numenius phaeopus", (
+        (35, 70, -10, 160),
+        (5, 35, -18, 50),
+        (-35, 5, 8, 50),
+        (-10, 35, 50, 150),
+        (-40, -10, 110, 155),
+    ), (1, 366)),
+)
+
+
+def _whimbrel_preference(latitude, longitude, day):
+    # Reuse coordinate/conflict/edge validation without requiring a photo date:
+    # these rules express geography only, not seasonal occurrence likelihood.
+    return regional_preference(WHIMBREL_REGIONS, latitude, longitude, 1)
+
+
 def refine(classification: dict, split: Split, latitude=None, longitude=None, day=None) -> dict:
     rules = {YELLOW_WARBLER: _yellow_warbler_preference,
-             WARBLING_VIREO: _warbling_vireo_preference}
+             WARBLING_VIREO: _warbling_vireo_preference,
+             WHIMBREL: _whimbrel_preference}
     rule = rules.get(split)
     preferred, reason = (rule(latitude, longitude, day) if rule
                          else (None, "no_geographic_rule"))
